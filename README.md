@@ -1,5 +1,10 @@
 This is a python3 version of `debsums2.py`, which was originally provided by [dw-itsecurity](http://www.dw-itsecurity.de/tools-hacks/debsums2-dpkg-integrity-check).
 
+**Note: Not all features were tested and there might be bugs in this
+version!**
+
+
+
 
 debsums2 - dpkg integrity check
 ===============================
