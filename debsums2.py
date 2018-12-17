@@ -716,8 +716,8 @@ def main():
 
     print()
     if md5sum_before:
-	print("Checksum of hashdb before read:         " + '\t' + md5sum_before)
-	print("Entries read from hashdb:               " + '\t' + str(len(hdList)))
+        print("Checksum of hashdb before read:         " + '\t' + md5sum_before)
+        print("Entries read from hashdb:               " + '\t' + str(len(hdList)))
     print("Entries read from " + infodir + ":      " + '\t' + str(len(iList)))
 
     if args.stats == True:
@@ -869,13 +869,13 @@ def main():
         print("Extracted md5sums from online packages: " + '\t' + str(len(md5onlineList)))
         print("Number of md5sums in hashdb:            " + '\t' + str(len(md5List)))
         print("Number of mismatched md5sums in hashdb: " + '\t' + str(len(md5differenceSet)))
-        
+
         for md5difference in md5differenceSet:
             logging.warning(
                 md5difference[0] +
                 ": Online md5sum differs to md5sum in hashdb")
 
-    if args.writedb == True:        
+    if args.writedb == True:
         writeJSON(
             'hashdb.json',
             sorted(
@@ -884,7 +884,7 @@ def main():
                     fsort['filename'])))
         md5sum_after = md5ChecksumHL('hashdb.json')
         if md5sum_before:
-		print("Checksum of hashdb before read: " + md5sum_before)
+            print("Checksum of hashdb before read: " + md5sum_before)
         print("Checksum of hashdb after write: " + md5sum_after)
         print("\n" + str(len(hdList)) + " entries written to hashdb")
     else:
