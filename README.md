@@ -234,6 +234,6 @@ The result of an integrity check is printed as a single character. Detailed info
 * verified online against debian package: dot (`.`) / `trustlevel=4`
 * verified locally against debian package: star (`*`) / `trustlevel=3`
 * verified locally against debsums2 md5sum library, needs `--writedb` in a previous debsums2 run: dash (`-`) / `trustlevel=2`
-* not verified, probably new of changed file: plus (`+`) / `trustlevel=1`
+* not verified, probably new or changed file: plus (`+`) / `trustlevel=1`
 * verification failed, see debsums2.log for info/warning: exclamation mark (`!`) / `trustlevel=0`
 
