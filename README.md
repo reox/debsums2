@@ -229,10 +229,10 @@ Result codes
 
 The result of an integrity check is printed as a single character. Detailed information is logged into debsums2.log.
 
-* verified online against debian package: dot (.)
-* verified locally against debian package: star (*)
-* verified locally against debsums2 md5sum library: dash (-)
+* verified online against debian package: dot (.) / trustlevel=4
+* verified locally against debian package: star (*) / trustlevel=3
+* verified locally against debsums2 md5sum library: dash (-) / trustlevel=2
   (needs --writedb in a previous debsums2 run)
-* not verified, probably new of changed file: plus (+)
-* verification failed, see debsums2.log for info/warning: exclamation mark (!)
+* not verified, probably new of changed file: plus (+) / trustlevel=1
+* verification failed, see debsums2.log for info/warning: exclamation mark (!) / trustlevel=0
 
