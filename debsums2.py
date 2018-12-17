@@ -12,12 +12,12 @@ import sys
 import argparse
 import simplejson
 import md5py
-import urlparse
-import httplib
+import urllib.parse
+import http.client
 import urllib3
 import string
 import tarfile
-from cStringIO import StringIO
+from io import StringIO
 import logging
 import zlib
 
@@ -134,7 +134,7 @@ def writeJSON(filename, rList):
         with open(filename, 'w') as f:
             simplejson.dump(rList, f, sort_keys=True, indent=' ')
     except IOError:
-        print 'Failed to write ' + filename
+        print('Failed to write ' + filename)
 
 
 def md5ChecksumHL(filename):
@@ -233,7 +233,7 @@ def fetch_md5sum_online(uriList, connection):
                     "Range": "bytes=%u-%u" %
                     (start, end)})
         if response.status in [200, 206]:
-            print(uri, start, end)
+            print((uri, start, end))
             with tarfile.open(mode="r:*", fileobj=StringIO(response.data)) as tar:
                 tarmembers = tar.getmembers()
                 for t in tarmembers:
@@ -247,8 +247,8 @@ def fetch_md5sum_online(uriList, connection):
                             logging.warning("No md5sums found in " + uri)
                         for m in md5sums:
                             md5Dict = dict(
-                                zip(['md5_online', 'filename'], m.split()))
-                            md5Dict['filename'] = unicode(
+                                list(zip(['md5_online', 'filename'], m.split())))
+                            md5Dict['filename'] = str(
                                 os.path.join(
                                     os.sep,
                                     md5Dict['filename']),
@@ -306,7 +306,7 @@ def fetch_pkg_online(fDict, connection):
     tarmembers = tar.getmembers()
     for t in tarmembers:
         if t.isfile():
-            fname = unicode(
+            fname = str(
                 os.path.join(
                     os.sep,
                     os.path.normpath(
@@ -330,7 +330,7 @@ def get_dpkginfo(infodir):
             package = line[1].strip()
         if len(md5line) == 2 and len(md5line[1]) == 32:
             if os.path.exists(md5line[0]):
-                md5Dict = dict(zip(['filename', 'md5_info'], md5line))
+                md5Dict = dict(list(zip(['filename', 'md5_info'], md5line)))
                 md5Dict['package'] = package
                 sDictList.append(md5Dict)
     sDictList = {s['filename']:s for s in sDictList}
@@ -342,8 +342,8 @@ def get_dpkginfo(infodir):
             if fileExtension == ".md5sums":
                 contents = readFile(os.path.join(dirpath, f)).splitlines()
                 for c in contents:
-                    md5Dict = dict(zip(['md5_info', 'filename'], c.split()))
-                    md5Dict['filename'] = unicode(
+                    md5Dict = dict(list(zip(['md5_info', 'filename'], c.split())))
+                    md5Dict['filename'] = str(
                         os.path.join(
                             os.sep,
                             md5Dict['filename']),
@@ -355,7 +355,7 @@ def get_dpkginfo(infodir):
                 for c in contents:
                     md5Dict = {'md5_info': None, 'filename': c}
                     md5Dict['package'] = os.path.splitext(f)[0]
-                    if md5Dict['filename'] in sDictList.keys():
+                    if md5Dict['filename'] in list(sDictList.keys()):
                         md5Dict['md5_info'] = sDictList[md5Dict['filename']]['md5_info']
                     fDictList.append(md5Dict)
     return fDictList  # {package, md5_info, filename}
@@ -368,7 +368,7 @@ def merge_lists(l1, l2, key):
             merged[item[key]].update(item)
         else:
             merged[item[key]] = item
-    return [val for (_, val) in merged.items()]
+    return [val for (_, val) in list(merged.items())]
 
 
 def dirscan(targetdir, fullscan):
@@ -379,7 +379,7 @@ def dirscan(targetdir, fullscan):
         if len(files) > 0 and (targetdev == os.stat(dirpath).st_dev or fullscan):
             logging.debug(dirpath + " entered.")
             for f in files:
-                filename = unicode(os.path.join(dirpath, f), 'utf-8')
+                filename = str(os.path.join(dirpath, f), 'utf-8')
                 if not os.path.exists(filename):  # broken link
                     logging.info(filename + ": Error while checking.")
                 elif stat.S_ISREG(os.stat(filename)[stat.ST_MODE]) and not os.path.islink(filename):
@@ -400,25 +400,25 @@ def get_stats(fDictList):
         trustlevel = get_trustlevel(fDict)
         trustlevelList[trustlevel] += 1
 
-        if 'md5_py' not in fDict.keys() or fDict['md5_py'] is None:
+        if 'md5_py' not in list(fDict.keys()) or fDict['md5_py'] is None:
             c_md5_py += 1
-        if 'md5_info' not in fDict.keys() or fDict['md5_info'] is None:
+        if 'md5_info' not in list(fDict.keys()) or fDict['md5_info'] is None:
             c_md5_info += 1
-        if 'md5_online' not in fDict.keys() or fDict['md5_online'] is None:
+        if 'md5_online' not in list(fDict.keys()) or fDict['md5_online'] is None:
             c_md5_online += 1
 
-    print
-    print "Number of unique files in hashdb:       " + '\t' + str(len(getset(fDictList, 'filename')))
-    print "Number of unique packages in hashdb:    " + '\t' + str(len(getset(fDictList, 'package')))
-    print "Number of unique uris in hashdb:        " + '\t' + str(len(getset(fDictList, 'uri')))
-    print "Number of files with mismatched md5sums:" + '\t' + str(trustlevelList[0])
-    print "Number of files with no md5sum:         " + '\t' + str(trustlevelList[1])
-    print "Number of files with local md5sum:      " + '\t' + str(trustlevelList[2])
-    print "Number of files with md5sum in package: " + '\t' + str(trustlevelList[3])
-    print "Number of files with md5sum online:     " + '\t' + str(trustlevelList[4])
-    print "Number of empty md5sums (python):       " + '\t' + str(c_md5_py)
-    print "Number of empty md5sums (dpkg):         " + '\t' + str(c_md5_info)
-    print "Number of empty md5sums (online):       " + '\t' + str(c_md5_online)
+    print()
+    print("Number of unique files in hashdb:       " + '\t' + str(len(getset(fDictList, 'filename'))))
+    print("Number of unique packages in hashdb:    " + '\t' + str(len(getset(fDictList, 'package'))))
+    print("Number of unique uris in hashdb:        " + '\t' + str(len(getset(fDictList, 'uri'))))
+    print("Number of files with mismatched md5sums:" + '\t' + str(trustlevelList[0]))
+    print("Number of files with no md5sum:         " + '\t' + str(trustlevelList[1]))
+    print("Number of files with local md5sum:      " + '\t' + str(trustlevelList[2]))
+    print("Number of files with md5sum in package: " + '\t' + str(trustlevelList[3]))
+    print("Number of files with md5sum online:     " + '\t' + str(trustlevelList[4]))
+    print("Number of empty md5sums (python):       " + '\t' + str(c_md5_py))
+    print("Number of empty md5sums (dpkg):         " + '\t' + str(c_md5_info))
+    print("Number of empty md5sums (online):       " + '\t' + str(c_md5_online))
 
 
 def update_packages(fDictList, iDictList, aptcache):
@@ -542,7 +542,7 @@ def extract(fDictList, key, value=None, exactmatch=False):
 
 
 def isvalidkey(fDictList, key, match=False):
-    if fDictList and key in fDictList.keys():
+    if fDictList and key in list(fDictList.keys()):
         if match == False:
             return True
         elif match == 'NotNone':
@@ -614,9 +614,9 @@ def diff_filestored_fileactive(fDict, fileactive):
     # compare active file dict with stored dict. If there are new or updated
     # entries, return them
     kList = []
-    for k in fileactive.keys():
+    for k in list(fileactive.keys()):
         if fDict and fileactive[k]:
-            if k in fDict.keys():
+            if k in list(fDict.keys()):
                 if not fileactive[k] == fDict[k]:
                     kList.append(k)  # update
             else:
@@ -647,7 +647,7 @@ def main():
     
     for hd in hdList:
         if isvalidkey(hd, 'filename') and isinstance(hd['filename'], str):
-            hd['filename'] = unicode(
+            hd['filename'] = str(
                 os.path.join(
                     os.sep,
                     os.path.normpath(
@@ -676,9 +676,9 @@ def main():
                 exactmatch=True)
 
         for i in extractList:
-            print
-            for k in sorted(i.iterkeys()):
-                print "%s: \t%s" % (k, i[k])
+            print()
+            for k in sorted(i.keys()):
+                print("%s: \t%s" % (k, i[k]))
         return
 
     if args.list_file is not None:
@@ -696,9 +696,9 @@ def main():
                 value=args.list_file,
                 exactmatch=True)
         for i in extractList:
-            print
-            for k in sorted(i.iterkeys()):
-                print "%s: \t%s" % (k, i[k])
+            print()
+            for k in sorted(i.keys()):
+                print("%s: \t%s" % (k, i[k]))
         return
 
     if args.remove_file is not None:
@@ -714,21 +714,21 @@ def main():
                 if hd['package'] == args.remove_package:
                     hdDelList.append(hd)
 
-    print
+    print()
     if md5sum_before:
-	print "Checksum of hashdb before read:         " + '\t' + md5sum_before
-	print "Entries read from hashdb:               " + '\t' + str(len(hdList))
-    print "Entries read from " + infodir + ":      " + '\t' + str(len(iList))
+	print("Checksum of hashdb before read:         " + '\t' + md5sum_before)
+	print("Entries read from hashdb:               " + '\t' + str(len(hdList)))
+    print("Entries read from " + infodir + ":      " + '\t' + str(len(iList)))
 
     if args.stats == True:
         get_stats(hdList)
 
     if args.clean:
         fsfullList = dirscan('/', True)
-        print "Total files found on disk               " + '\t' + str(len(fsfullList))
+        print("Total files found on disk               " + '\t' + str(len(fsfullList)))
         fDelSet = getset(hdList, 'filename').difference(set(fsfullList))
         #print set(dirscan('/', False)).difference(getset(hdList, 'filename'))
-        print "Dead entries to be expunged             " + '\t' + str(len(fDelSet))
+        print("Dead entries to be expunged             " + '\t' + str(len(fDelSet)))
         hdDelList = [d for d in hdList if (d['filename']) in fDelSet]
         hdSet = getset(hdList, 'filename')
         for hd in hdList:
@@ -736,14 +736,14 @@ def main():
                 hdSet.discard(hd['filename'])
             else:
                 hdDupList.append(hd)
-        print "Duplicate entries to be expunged:       " + '\t' + str(len(hdDupList))
+        print("Duplicate entries to be expunged:       " + '\t' + str(len(hdDupList)))
 
     if args.update == True:
         updateDictList = update_packages(hdList, iList, aptcache)
-        print "Files to be expunged from hashdb:       " + '\t' + str(len(updateDictList['fDelList']))
-        print "Files to be added to hashdb:            " + '\t' + str(len(updateDictList['fAddList']))
-        print "Files to be changed in hashdb:          " + '\t' + str(len(updateDictList['fChangeList']))
-        print "Number of disappeared packages:         " + '\t' + str(len(updateDictList['pDisappearedList']))
+        print("Files to be expunged from hashdb:       " + '\t' + str(len(updateDictList['fDelList'])))
+        print("Files to be added to hashdb:            " + '\t' + str(len(updateDictList['fAddList'])))
+        print("Files to be changed in hashdb:          " + '\t' + str(len(updateDictList['fChangeList'])))
+        print("Number of disappeared packages:         " + '\t' + str(len(updateDictList['pDisappearedList'])))
         fsList.extend(updateDictList['fAddList'])
         fsList.extend(updateDictList['fChangeList'])
         hdDelList.extend(updateDictList['fDelList'])
@@ -760,15 +760,15 @@ def main():
         for i in extract(iList, 'package', value=args.package, exactmatch=True):
             if os.path.exists(i['filename']):
                 fsList.append(i['filename'])
-        print "Total files in package " + args.package + '\t' + str(len(fsList))
+        print("Total files in package " + args.package + '\t' + str(len(fsList)))
         fnewSet = set(fsList).difference(getset(hdList, 'filename'))
-        print "Number of new files in package " + args.package + '\t' + str(len(fnewSet))
+        print("Number of new files in package " + args.package + '\t' + str(len(fnewSet)))
 
     if args.directory is not None:
         fsList = sorted(dirscan(args.directory, False))
-        print "Total files found in " + args.directory + '\t' + str(len(fsList))
+        print("Total files found in " + args.directory + '\t' + str(len(fsList)))
         fnewSet = set(fsList).difference(getset(hdList, 'filename'))
-        print "Number of new files in package " + args.directory + '\t' + str(len(fnewSet))
+        print("Number of new files in package " + args.directory + '\t' + str(len(fnewSet)))
     exit
 
     if len(hdDelList) > 0:
@@ -777,7 +777,7 @@ def main():
             logging.debug(hd['filename'] + ": File removed from hashdb.")
             changes += 1
         if not len(fsList) and not len(hdDupList):
-            print "\n" + str(changes) + " changes to hashdb."
+            print("\n" + str(changes) + " changes to hashdb.")
     
     if len(hdDupList) > 0:
         for hd in hdDupList:
@@ -786,7 +786,7 @@ def main():
             logging.debug(hd['filename'] + ": Duplicate removed from hashdb.")
             changes += 1
         if not len(fsList):
-            print "\n" + str(changes) + " changes to hashdb."
+            print("\n" + str(changes) + " changes to hashdb.")
     if len(fsList) > 0:
         md5onlineList = []
         md5onlineSet = set([])
@@ -855,20 +855,20 @@ def main():
                     "hashdb backup saved to /tmp with " + str(len(hdList)) + " entries")
                 totalchanges = totalchanges + changes
                 changes = 0
-        print "\n" + str(totalchanges + changes) + " changes to hashdb."
+        print("\n" + str(totalchanges + changes) + " changes to hashdb.")
 
     if args.verify_online == True:
         uriSet = getset(hdList, 'uri')
-        print "Number of packages to fetch online:     " + '\t' + str(len(uriSet))
+        print("Number of packages to fetch online:     " + '\t' + str(len(uriSet)))
         md5onlineList = fetch_md5sum_online(uriSet, connection)
         md5onlineList2 = extract(md5onlineList, 'md5_online')
         md5onlineSet = set([(d['filename'], d['md5_online']) for d in md5onlineList2])
         md5List = extract(hdList, 'md5_online')
         md5Set = set([(d['filename'], d['md5_online']) for d in md5List])
         md5differenceSet = md5Set.difference(md5onlineSet)
-        print "Extracted md5sums from online packages: " + '\t' + str(len(md5onlineList))
-        print "Number of md5sums in hashdb:            " + '\t' + str(len(md5List))
-        print "Number of mismatched md5sums in hashdb: " + '\t' + str(len(md5differenceSet))
+        print("Extracted md5sums from online packages: " + '\t' + str(len(md5onlineList)))
+        print("Number of md5sums in hashdb:            " + '\t' + str(len(md5List)))
+        print("Number of mismatched md5sums in hashdb: " + '\t' + str(len(md5differenceSet)))
         
         for md5difference in md5differenceSet:
             logging.warning(
@@ -884,11 +884,11 @@ def main():
                     fsort['filename'])))
         md5sum_after = md5ChecksumHL('hashdb.json')
         if md5sum_before:
-		print "Checksum of hashdb before read: " + md5sum_before
-        print "Checksum of hashdb after write: " + md5sum_after
-        print "\n" + str(len(hdList)) + " entries written to hashdb"
+		print("Checksum of hashdb before read: " + md5sum_before)
+        print("Checksum of hashdb after write: " + md5sum_after)
+        print("\n" + str(len(hdList)) + " entries written to hashdb")
     else:
-        print "\n" + "No entries written to hashdb"
+        print("\n" + "No entries written to hashdb")
 
 if __name__ == '__main__':
     main()
