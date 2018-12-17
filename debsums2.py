@@ -233,7 +233,8 @@ def fetch_md5sum_online(uriList, connection):
                     "Range": "bytes=%u-%u" %
                     (start, end)})
         if response.status in [200, 206]:
-            with tarfile.open(mode="r:gz", fileobj=StringIO(response.data)) as tar:
+            print(uri, start, end)
+            with tarfile.open(mode="r:*", fileobj=StringIO(response.data)) as tar:
                 tarmembers = tar.getmembers()
                 for t in tarmembers:
                     if "md5sums" in t.name:
