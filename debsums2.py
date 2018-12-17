@@ -17,7 +17,7 @@ import http.client
 import urllib3
 import string
 import tarfile
-from io import StringIO
+from io import BytesIO
 import logging
 import zlib
 
@@ -185,11 +185,11 @@ def parse_string(s):
 
 
 def parse_num(s):
-    return string.atoi(s)
+    return int(s)
 
 
 def parse_oct(s):
-    return string.atoi(s, 8)
+    return int(s, 8)
 
 
 def parse_header(s):
@@ -233,26 +233,18 @@ def fetch_md5sum_online(uriList, connection):
                     "Range": "bytes=%u-%u" %
                     (start, end)})
         if response.status in [200, 206]:
-            print((uri, start, end))
-            with tarfile.open(mode="r:*", fileobj=StringIO(response.data)) as tar:
-                tarmembers = tar.getmembers()
-                for t in tarmembers:
+            with tarfile.open(mode="r:*", fileobj=BytesIO(response.data)) as tar:
+                for t in tar.getmembers():
                     if "md5sums" in t.name:
-                        md5sums = tar.extractfile(t).read().splitlines()
+                        md5sums = tar.extractfile(t).read().decode("utf-8").splitlines()
                         if len(md5sums) > 0:
-                            logging.debug(str(len(md5sums)) +
-                                          " md5sums extracted from " +
-                                          uri)
+                            logging.debug("{} md5sums extracted from {}".format(len(md5sums), uri))
                         else:
                             logging.warning("No md5sums found in " + uri)
                         for m in md5sums:
                             md5Dict = dict(
                                 list(zip(['md5_online', 'filename'], m.split())))
-                            md5Dict['filename'] = str(
-                                os.path.join(
-                                    os.sep,
-                                    md5Dict['filename']),
-                                'utf-8')
+                            md5Dict['filename'] = os.path.join(os.sep, md5Dict['filename'])
                             md5sumsDictList.append(md5Dict)
                         break
         else:
@@ -282,17 +274,7 @@ def fetch_pkg_online(fDict, connection):
     data_end = data_start + data['size']
 
     try:
-        tar = tarfile.open(
-            mode="r:*",
-            fileobj=StringIO(
-                response.data[
-                    data_start:data_end]))
-    except tarfile.ReadError:
-        import subprocess
-        with open("/tmp/dump.xz", 'w') as f:
-            f.write(response.data[data_start:data_end])
-        subprocess.call(['xz', '--decompress', '--force', '/tmp/dump.xz'])
-        tar = tarfile.open(mode="r", name='/tmp/dump')
+        tar = tarfile.open(mode="r:*", fileobj=BytesIO(response.data[data_start:data_end]))
     except:
         if isvalidkey(fDict, 'filename'):
             logging.info(
@@ -303,15 +285,9 @@ def fetch_pkg_online(fDict, connection):
             logging.info("Error while loading " + fDict['uri'])
         return md5DictList
 
-    tarmembers = tar.getmembers()
-    for t in tarmembers:
+    for t in tar.getmembers():
         if t.isfile():
-            fname = str(
-                os.path.join(
-                    os.sep,
-                    os.path.normpath(
-                        t.name)),
-                'utf-8')
+            fname = os.path.join(os.sep, os.path.normpath(t.name))
             md5DictList.append(
                 {'filename': fname, 'md5_online': md5Checksum(tar.extractfile(t))})
     if len(md5DictList) == 0:
@@ -346,8 +322,7 @@ def get_dpkginfo(infodir):
                     md5Dict['filename'] = str(
                         os.path.join(
                             os.sep,
-                            md5Dict['filename']),
-                        'utf-8')
+                            md5Dict['filename']))
                     md5Dict['package'] = os.path.splitext(f)[0]
                     fDictList.append(md5Dict)
             elif fileExtension == ".conffiles":
@@ -379,7 +354,7 @@ def dirscan(targetdir, fullscan):
         if len(files) > 0 and (targetdev == os.stat(dirpath).st_dev or fullscan):
             logging.debug(dirpath + " entered.")
             for f in files:
-                filename = str(os.path.join(dirpath, f), 'utf-8')
+                filename = str(os.path.join(dirpath, f))
                 if not os.path.exists(filename):  # broken link
                     logging.info(filename + ": Error while checking.")
                 elif stat.S_ISREG(os.stat(filename)[stat.ST_MODE]) and not os.path.islink(filename):
@@ -651,11 +626,12 @@ def main():
                 os.path.join(
                     os.sep,
                     os.path.normpath(
-                        hd['filename'])),
-                'utf-8')
+                        hd['filename'])))
     hdDelList = []
     hdDupList = []
-    iList = sorted(get_dpkginfo(infodir))
+    # FIXME: 
+    # iList = sorted(get_dpkginfo(infodir))
+    iList = get_dpkginfo(infodir)
     fsList = []
     changes = 0
     totalchanges = 0
