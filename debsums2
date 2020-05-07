@@ -1,4 +1,4 @@
-#!/usr/bin/python
+#!/usr/bin/python3
 # -*- coding: latin-1 -*-
 #
 # debsums2 - dpkg integrity check
@@ -634,7 +634,7 @@ def main():
     hdList = readJSON('hashdb.json')
     if args.writedb == True:
         writeJSON('hashdb.json.bak', hdList)
-    
+
     for hd in hdList:
         if isvalidkey(hd, 'filename') and isinstance(hd['filename'], str):
             hd['filename'] = str(
@@ -644,7 +644,7 @@ def main():
                         hd['filename'])))
     hdDelList = []
     hdDupList = []
-    # FIXME: 
+    # FIXME:
     # iList = sorted(get_dpkginfo(infodir))
     iList = get_dpkginfo(infodir)
     fsList = []
@@ -769,7 +769,7 @@ def main():
             changes += 1
         if not len(fsList) and not len(hdDupList):
             print("\n" + str(changes) + " changes to hashdb.")
-    
+
     if len(hdDupList) > 0:
         for hd in hdDupList:
             if hd in hdList:
