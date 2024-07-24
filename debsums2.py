@@ -39,7 +39,6 @@ import zlib
 import md5py
 
 
-statusfile = "/var/lib/dpkg/status"
 hashdb = 'hashdb.json'
 
 
@@ -321,38 +320,51 @@ def fetch_pkg_online(fDict, connection):
     return md5DictList
 
 
-def get_dpkginfo(infodir='/var/lib/dpkg/info'):
+def get_dpkginfo(infodir='/var/lib/dpkg/info', statusfile="/var/lib/dpkg/status"):
     # extract md5sums from dpkg status file
     sDictList = []
     contents = readFile(statusfile).splitlines()
+    package = None
     for c in contents:
-        line = c.strip().split(':')
-        md5line = line[0].split(' ')
-        if len(line) == 2 and line[0] == "Package":
-            package = line[1].strip()
-        if len(md5line) == 2 and len(md5line[1]) == 32:
-            if os.path.exists(md5line[0]):
-                md5Dict = dict(list(zip(['filename', 'md5_info'], md5line)))
-                md5Dict['package'] = package
-                sDictList.append(md5Dict)
+        if c.startswith('Package: '):
+            package = c[9:].strip()
+            continue
+
+        md5line = c.strip().split(' ')
+        # TODO: actually this could be a statemachine, that searches for "Conffiles:" first
+        if len(md5line) == 2 and len(md5line[1]) == 32 and os.path.exists(md5line[0]):
+            if package is None:
+                raise RuntimeError("No package found for File Entry!")
+            sDictList.append({
+                'filename': os.path.realpath(md5line[0]),  # XXX: use canonical path!
+                'md5_info': md5line[1],
+                'package': package,
+            })
     sDictList = {s['filename']: s for s in sDictList}
+    logging.debug(f"Loaded {len(sDictList)} Conffile entries from {statusfile}")
+
     # read all available md5sums from infodir
     fDictList = []
     for dirpath, dirs, files in os.walk(infodir):
         for f in files:
-            fileName, fileExtension = os.path.splitext(f)
-            if fileExtension == ".md5sums":
+            package, fileExtension = os.path.splitext(f)
+            if fileExtension.lower() == ".md5sums":
                 contents = readFile(os.path.join(dirpath, f)).splitlines()
                 for c in contents:
-                    md5Dict = dict(list(zip(['md5_info', 'filename'], c.split())))
-                    md5Dict['filename'] = os.path.join(os.sep, md5Dict['filename'])
-                    md5Dict['package'] = os.path.splitext(f)[0]
-                    fDictList.append(md5Dict)
-            elif fileExtension == ".conffiles":
+                    # FIXME: is "  " really a good idea?
+                    md5, filename = c.split("  ")
+                    assert len(md5) == 32
+                    fDictList.append({
+                        # XXX: path is relative to root, use canonical path
+                        'filename': os.path.realpath(os.path.join(os.sep, filename)),
+                        'md5_info': md5,
+                        'package': package,
+                    })
+            elif fileExtension.lower() == ".conffiles":
                 contents = readFile(os.path.join(dirpath, f)).splitlines()
                 for c in contents:
-                    md5Dict = {'md5_info': None, 'filename': c}
-                    md5Dict['package'] = os.path.splitext(f)[0]
+                    md5Dict = {'md5_info': None, 'filename': os.path.realpath(c)}
+                    md5Dict['package'] = package
                     if md5Dict['filename'] in list(sDictList.keys()):
                         md5Dict['md5_info'] = sDictList[md5Dict['filename']]['md5_info']
                     fDictList.append(md5Dict)
@@ -384,7 +396,7 @@ def dirscan(targetdir: str, fullscan: bool = False) -> list:
                 if not os.path.exists(filename):  # broken link
                     logging.info(filename + ": Error while checking.")
                 elif stat.S_ISREG(os.stat(filename)[stat.ST_MODE]) and not os.path.islink(filename):
-                    workList.append(filename)
+                    workList.append(os.path.realpath(filename))  # XXX: canonical path
     return workList
 
 
