@@ -21,7 +21,7 @@ The software can be downloaded here: http://files.dw-itsecurity.de/debsums2.zip
 Requirements
 ------------
 
-You need the libraries `python3-urllib3`, `python3-simplejson` and `python3-apt` installed.
+You need the libraries `python3-urllib3` and `python3-apt` installed.
 
 Usage
 -----

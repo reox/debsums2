@@ -1,46 +1,46 @@
 #!/usr/bin/python3
-# -*- coding: latin-1 -*-
-#
-# debsums2 - dpkg integrity check
-# Copyright (C) 2014  Roland Wenzel
-#
-# This program is free software: you can redistribute it and/or modify
-# it under the terms of the GNU General Public License as published by
-# the Free Software Foundation, either version 3 of the License, or
-# (at your option) any later version.
-#
-# This program is distributed in the hope that it will be useful,
-# but WITHOUT ANY WARRANTY; without even the implied warranty of
-# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-# GNU General Public License for more details.
-#
-# You should have received a copy of the GNU General Public License
-# along with this program.  If not, see <https://www.gnu.org/licenses/>.
-__date__    = '2014-10-10'
-__version__ = 2.0
+"""
+debsums2 - dpkg integrity check
+Copyright (C) 2014  Roland Wenzel
+Copyright (C) 2023  Sebastian Bachmann
+
+This program is free software: you can redistribute it and/or modify
+it under the terms of the GNU General Public License as published by
+the Free Software Foundation, either version 3 of the License, or
+(at your option) any later version.
+
+This program is distributed in the hope that it will be useful,
+but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+GNU General Public License for more details.
+
+You should have received a copy of the GNU General Public License
+along with this program.  If not, see <https://www.gnu.org/licenses/>.
+"""
+__date__    = '2023-11-25'
+__version__ = 2.1
 
 
+import argparse
+import hashlib
+import http.client
+import io
+import json
+import logging
 import os
 import stat
-import hashlib
-import sys
-import argparse
-import simplejson
-import md5py
-import urllib.parse
-import http.client
-import urllib3
 import string
+import sys
 import tarfile
-from io import BytesIO
-import logging
+import urllib3
+import urllib.parse
 import zlib
 
-infodir = "/var/lib/dpkg/info"
+import md5py
+
+
 statusfile = "/var/lib/dpkg/status"
-logging.basicConfig(filename="debsums2.log", level=logging.DEBUG)
-urllib3_logger = logging.getLogger('urllib3')
-urllib3_logger.setLevel(logging.INFO)
+hashdb = 'hashdb.json'
 
 
 def parse_command_line():
@@ -121,22 +121,9 @@ def parse_command_line():
     args = parser.parse_args()
 
     if args.version:
-        print("debsums2 - dpkg integrity check")
-        print("Copyright (C) 2014  Roland Wenzel")
-        print("Version {}".format(__version__))
-        print("")
-        print("This program is free software: you can redistribute it and/or modify")
-        print("it under the terms of the GNU General Public License as published by")
-        print("the Free Software Foundation, either version 3 of the License, or")
-        print("(at your option) any later version.")
-        print("")
-        print("This program is distributed in the hope that it will be useful,")
-        print("but WITHOUT ANY WARRANTY; without even the implied warranty of")
-        print("MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the")
-        print("GNU General Public License for more details.")
-        print("")
-        print("You should have received a copy of the GNU General Public License")
-        print("along with this program.  If not, see <https://www.gnu.org/licenses/>.")
+        print("debsums2 version {}".format(__version__))
+        print()
+        print(__doc__)
         sys.exit(0)
 
     if not (args.directory or args.file or args.package) \
@@ -162,7 +149,7 @@ def readFile(filename):
 def readJSON(filename):
     try:
         with open(filename, 'r') as f:
-            rList = simplejson.load(f, encoding="utf-8")
+            rList = json.load(f, encoding="utf-8")
     except IOError:
         rList = []
     return rList
@@ -171,7 +158,7 @@ def readJSON(filename):
 def writeJSON(filename, rList):
     try:
         with open(filename, 'w') as f:
-            simplejson.dump(rList, f, sort_keys=True, indent=' ')
+            json.dump(rList, f, sort_keys=True, indent=' ')
     except IOError:
         print('Failed to write ' + filename)
 
@@ -272,7 +259,7 @@ def fetch_md5sum_online(uriList, connection):
                     "Range": "bytes=%u-%u" %
                     (start, end)})
         if response.status in [200, 206]:
-            with tarfile.open(mode="r:*", fileobj=BytesIO(response.data)) as tar:
+            with tarfile.open(mode="r:*", fileobj=io.BytesIO(response.data)) as tar:
                 for t in tar.getmembers():
                     if "md5sums" in t.name:
                         md5sums = tar.extractfile(t).read().decode("utf-8").splitlines()
@@ -313,7 +300,7 @@ def fetch_pkg_online(fDict, connection):
     data_end = data_start + data['size']
 
     try:
-        tar = tarfile.open(mode="r:*", fileobj=BytesIO(response.data[data_start:data_end]))
+        tar = tarfile.open(mode="r:*", fileobj=io.BytesIO(response.data[data_start:data_end]))
     except:
         if isvalidkey(fDict, 'filename'):
             logging.info(
@@ -334,7 +321,7 @@ def fetch_pkg_online(fDict, connection):
     return md5DictList
 
 
-def get_dpkginfo(infodir):
+def get_dpkginfo(infodir='/var/lib/dpkg/info'):
     # extract md5sums from dpkg status file
     sDictList = []
     contents = readFile(statusfile).splitlines()
@@ -348,7 +335,7 @@ def get_dpkginfo(infodir):
                 md5Dict = dict(list(zip(['filename', 'md5_info'], md5line)))
                 md5Dict['package'] = package
                 sDictList.append(md5Dict)
-    sDictList = {s['filename']:s for s in sDictList}
+    sDictList = {s['filename']: s for s in sDictList}
     # read all available md5sums from infodir
     fDictList = []
     for dirpath, dirs, files in os.walk(infodir):
@@ -358,10 +345,7 @@ def get_dpkginfo(infodir):
                 contents = readFile(os.path.join(dirpath, f)).splitlines()
                 for c in contents:
                     md5Dict = dict(list(zip(['md5_info', 'filename'], c.split())))
-                    md5Dict['filename'] = str(
-                        os.path.join(
-                            os.sep,
-                            md5Dict['filename']))
+                    md5Dict['filename'] = os.path.join(os.sep, md5Dict['filename'])
                     md5Dict['package'] = os.path.splitext(f)[0]
                     fDictList.append(md5Dict)
             elif fileExtension == ".conffiles":
@@ -385,15 +369,18 @@ def merge_lists(l1, l2, key):
     return [val for (_, val) in list(merged.items())]
 
 
-def dirscan(targetdir, fullscan):
-    # find files in given directory. Restrict to st_dev, if not fullscan
+def dirscan(targetdir: str, fullscan: bool = False) -> list:
+    """
+    Scans a directory recursively and returns a list of files.
+    Set fullscan to true to scan across filesystem boundaries
+    """
     targetdev = os.stat(targetdir).st_dev
     workList = []
     for dirpath, dirs, files in os.walk(targetdir):
-        if len(files) > 0 and (targetdev == os.stat(dirpath).st_dev or fullscan):
+        if files and (fullscan or targetdev == os.stat(dirpath).st_dev):
             logging.debug(dirpath + " entered.")
             for f in files:
-                filename = str(os.path.join(dirpath, f))
+                filename = os.path.join(dirpath, f)
                 if not os.path.exists(filename):  # broken link
                     logging.info(filename + ": Error while checking.")
                 elif stat.S_ISREG(os.stat(filename)[stat.ST_MODE]) and not os.path.islink(filename):
@@ -646,18 +633,22 @@ def diff_filestored_fileactive(fDict, fileactive):
 
 
 def main():
+    # TODO: allow for stdout logging
+    logging.basicConfig(filename="debsums2.log", level=logging.DEBUG)
+    logging.getLogger('urllib3').setLevel(logging.INFO)
+
     logging.debug("Starting debsums2 -----------------------------")
     args = parse_command_line()
-    if args.directory is not None or args.update == True or args.file != None or args.package != None:
+    if args.directory or args.update or args.file or args.package:
         import apt
         aptcache = apt.Cache()
     if args.online or args.online_full or args.verify_online:
         connection = urllib3.PoolManager()
 
-    md5sum_before = md5ChecksumHL('hashdb.json')
-    hdList = readJSON('hashdb.json')
+    md5sum_before = md5ChecksumHL(hashdb)
+    hdList = readJSON(hashdb)
     if args.writedb == True:
-        writeJSON('hashdb.json.bak', hdList)
+        writeJSON(hashdb + '.bak', hdList)
 
     for hd in hdList:
         if isvalidkey(hd, 'filename') and isinstance(hd['filename'], str):
@@ -668,12 +659,9 @@ def main():
                         hd['filename'])))
     hdDelList = []
     hdDupList = []
-    # FIXME:
-    # iList = sorted(get_dpkginfo(infodir))
-    iList = get_dpkginfo(infodir)
-    fsList = []
+    iList = get_dpkginfo()  # contains all found (package, md5, filename) tuple from apt
+    fsList = []  # This list is filled with all file paths that should be checked
     changes = 0
-    totalchanges = 0
 
     if args.list_package is not None:
         if args.list_package[-1] == "*":
@@ -733,9 +721,9 @@ def main():
     if md5sum_before:
         print("Checksum of hashdb before read:         " + '\t' + md5sum_before)
         print("Entries read from hashdb:               " + '\t' + str(len(hdList)))
-    print("Entries read from " + infodir + ":      " + '\t' + str(len(iList)))
+    print(f"Entries read from dpkg:\t{len(iList)}")
 
-    if args.stats == True:
+    if args.stats:
         get_stats(hdList)
 
     if args.clean:
@@ -784,7 +772,6 @@ def main():
         print("Total files found in " + args.directory + '\t' + str(len(fsList)))
         fnewSet = set(fsList).difference(getset(hdList, 'filename'))
         print("Number of new files in package " + args.directory + '\t' + str(len(fnewSet)))
-    exit
 
     if len(hdDelList) > 0:
         for hd in hdDelList:
@@ -802,17 +789,17 @@ def main():
             changes += 1
         if not len(fsList):
             print("\n" + str(changes) + " changes to hashdb.")
-    if len(fsList) > 0:
+
+    # Here starts the actual comparison...
+    if fsList:
         md5onlineList = []
-        md5onlineSet = set([])
+        md5onlineSet = set()
 
         for f in fsList:
             sys.stdout.flush()
             trustlevel = 0
-            if not f in fnewSet:
-                filestored = next(
-                    (hd for hd in hdList if hd['filename'] == f),
-                    None)
+            if f not in fnewSet:
+                filestored = next((hd for hd in hdList if hd['filename'] == f), None)
                 trustlevel = get_trustlevel(filestored)
                 if not isvalidkey(filestored, 'md5_hl') or filestored['md5_hl'] != md5ChecksumHL(filestored['filename']):
                     trustlevel = 0
@@ -824,17 +811,15 @@ def main():
                             'md5_info': None, 'package': None}))
                 fileactive['uri'] = get_uri(aptcache, fileactive['package'])
                 fileactive['md5_hl'] = md5ChecksumHL(fileactive['filename'])
-                if args.insane == True:
-                    fileactive['md5_py'] = md5ChecksumPY(
-                        fileactive['filename'])
-                if args.online == True or args.online_full == True:
+
+                if args.insane:
+                    fileactive['md5_py'] = md5ChecksumPY(fileactive['filename'])
+
+                if args.online or args.online_full:
                     if isvalidkey(fileactive, 'uri', 'NotNone'):
                         if not fileactive['uri'] in md5onlineSet:
-                            if args.online_full == True:
-                                md5onlineList.extend(
-                                    fetch_pkg_online(
-                                        fileactive,
-                                        connection))
+                            if args.online_full:
+                                md5onlineList.extend(fetch_pkg_online(fileactive, connection))
                             else:
                                 md5onlineList.extend(
                                     fetch_md5sum_online([fileactive['uri']], connection))
@@ -864,15 +849,13 @@ def main():
             else:
                 fileactive = filestored
             sys.stdout.write(eval_trustlevel(fileactive, trustlevel))
-            if changes == 250 and args.writedb == True:
-                writeJSON('/tmp/hashdb.json', hdList)
-                logging.debug(
-                    "hashdb backup saved to /tmp with " + str(len(hdList)) + " entries")
-                totalchanges = totalchanges + changes
-                changes = 0
-        print("\n" + str(totalchanges + changes) + " changes to hashdb.")
+            if args.writedb and changes > 0 and changes % 250 == 0:
+                # TODO use tmpfile
+                writeJSON(os.path.join('/tmp', hashdb), hdList)
+                logging.debug("hashdb backup saved to /tmp with " + str(len(hdList)) + " entries")
+        print("\n" + str(changes) + " changes to hashdb.")
 
-    if args.verify_online == True:
+    if args.verify_online:
         uriSet = getset(hdList, 'uri')
         print("Number of packages to fetch online:     " + '\t' + str(len(uriSet)))
         md5onlineList = fetch_md5sum_online(uriSet, connection)
@@ -890,14 +873,14 @@ def main():
                 md5difference[0] +
                 ": Online md5sum differs to md5sum in hashdb")
 
-    if args.writedb == True:
+    if args.writedb:
         writeJSON(
-            'hashdb.json',
+            hashdb,
             sorted(
                 hdList,
                 key=lambda fsort: (
                     fsort['filename'])))
-        md5sum_after = md5ChecksumHL('hashdb.json')
+        md5sum_after = md5ChecksumHL(hashdb)
         if md5sum_before:
             print("Checksum of hashdb before read: " + md5sum_before)
         print("Checksum of hashdb after write: " + md5sum_after)
