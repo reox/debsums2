@@ -136,13 +136,14 @@ def parse_command_line():
     return args
 
 
-def readFile(filename):
+def readFile(filename, strict=False):
     try:
         with open(filename, 'r') as f:
-            data = f.read()
-            return data
+            return f.read().splitlines()
     except IOError:
-        return ''
+        if strict:
+            raise
+        return []
 
 
 def readJSON(filename):
@@ -269,7 +270,8 @@ def fetch_md5sum_online(uriList, connection):
                         for m in md5sums:
                             md5Dict = dict(
                                 list(zip(['md5_online', 'filename'], m.split())))
-                            md5Dict['filename'] = os.path.join(os.sep, md5Dict['filename'])
+                            # XXX: canonical path
+                            md5Dict['filename'] = os.path.realpath(os.path.join(os.sep, md5Dict['filename']))
                             md5sumsDictList.append(md5Dict)
                         break
         else:
@@ -323,9 +325,8 @@ def fetch_pkg_online(fDict, connection):
 def get_dpkginfo(infodir='/var/lib/dpkg/info', statusfile="/var/lib/dpkg/status"):
     # extract md5sums from dpkg status file
     sDictList = []
-    contents = readFile(statusfile).splitlines()
     package = None
-    for c in contents:
+    for c in readFile(statusfile):
         if c.startswith('Package: '):
             package = c[9:].strip()
             continue
@@ -349,8 +350,7 @@ def get_dpkginfo(infodir='/var/lib/dpkg/info', statusfile="/var/lib/dpkg/status"
         for f in files:
             package, fileExtension = os.path.splitext(f)
             if fileExtension.lower() == ".md5sums":
-                contents = readFile(os.path.join(dirpath, f)).splitlines()
-                for c in contents:
+                for c in readFile(os.path.join(dirpath, f)):
                     # FIXME: is "  " really a good idea?
                     md5, filename = c.split("  ")
                     assert len(md5) == 32
@@ -361,8 +361,7 @@ def get_dpkginfo(infodir='/var/lib/dpkg/info', statusfile="/var/lib/dpkg/status"
                         'package': package,
                     })
             elif fileExtension.lower() == ".conffiles":
-                contents = readFile(os.path.join(dirpath, f)).splitlines()
-                for c in contents:
+                for c in readFile(os.path.join(dirpath, f)):
                     md5Dict = {'md5_info': None, 'filename': os.path.realpath(c)}
                     md5Dict['package'] = package
                     if md5Dict['filename'] in list(sDictList.keys()):
@@ -753,7 +752,7 @@ def main():
                 hdDupList.append(hd)
         print("Duplicate entries to be expunged:       " + '\t' + str(len(hdDupList)))
 
-    if args.update == True:
+    if args.update is True:
         updateDictList = update_packages(hdList, iList, aptcache)
         print("Files to be expunged from hashdb:       " + '\t' + str(len(updateDictList['fDelList'])))
         print("Files to be added to hashdb:            " + '\t' + str(len(updateDictList['fAddList'])))
